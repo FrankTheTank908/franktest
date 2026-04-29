@@ -62,3 +62,33 @@ Default URL: `http://localhost:8080`
 - Replace mock network service with `HTTPNetworkTestService` for device runs.
 - Confirm PDF export/paywall behavior.
 
+
+## Unsigned iOS IPA release workflow
+
+This repository includes `.github/workflows/ios-unsigned-ipa.yml` for automated unsigned Release IPA builds in GitHub Actions.
+
+### What it automates
+
+- Installs build tooling (`xcodegen`) on the macOS runner.
+- Generates `NetProof.xcodeproj` from `project.yml` when the project file is missing.
+- Resolves Swift package dependencies with `xcodebuild -resolvePackageDependencies`.
+- Archives with signing disabled and packages an unsigned `.ipa`.
+- Uploads the `.ipa` as an Actions artifact and (optionally) to a GitHub Release.
+
+### Run it
+
+1. Open **Actions** → **iOS Unsigned IPA** → **Run workflow**.
+2. Provide:
+   - `scheme` (default `NetProof`)
+   - `configuration` (default `Release`)
+   - `project_path` (default `auto`: auto-detects or generates project)
+   - `create_release` (default `true`: uploads `.ipa` to GitHub Releases)
+3. Download from either:
+   - the `unsigned-ipa` Actions artifact, or
+   - the generated GitHub release asset.
+
+### Notes
+
+- Build is intentionally unsigned (`CODE_SIGNING_ALLOWED=NO`).
+- This is designed for external/manual signing after download.
+- No Apple signing certificates or API keys are stored in this repository.

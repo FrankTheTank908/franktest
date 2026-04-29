@@ -1,0 +1,145 @@
+name: iOS Unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      scheme:
+        description: "Xcode scheme to build"
+        required: true
+        default: "NetProof"
+      configuration:
+        description: "Build configuration"
+        required: true
+        default: "Release"
+      project_path:
+        description: "Path to .xcodeproj/.xcworkspace (leave default for auto)"
+        required: true
+        default: "auto"
+      create_release:
+        description: "Create/update GitHub release and upload IPA"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build_unsigned_ipa:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install project generation tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew update
+          brew install xcodegen
+
+      - name: Generate Xcode project if missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d "NetProof.xcodeproj" ]]; then
+            if [[ -f "project.yml" ]]; then
+              xcodegen generate
+            else
+              echo "Missing NetProof.xcodeproj and project.yml. Add one of them to the repo."
+              exit 1
+            fi
+          fi
+
+      - name: Resolve project/workspace path
+        id: project_kind
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_PATH="${{ github.event.inputs.project_path }}"
+          if [[ "$INPUT_PATH" == "auto" ]]; then
+            if [[ -d "NetProof.xcworkspace" ]]; then
+              INPUT_PATH="NetProof.xcworkspace"
+            elif [[ -d "NetProof.xcodeproj" ]]; then
+              INPUT_PATH="NetProof.xcodeproj"
+            else
+              INPUT_PATH=$(find . -maxdepth 2 -name "*.xcworkspace" | head -n1)
+              if [[ -z "$INPUT_PATH" ]]; then
+                INPUT_PATH=$(find . -maxdepth 2 -name "*.xcodeproj" | head -n1)
+              fi
+            fi
+          fi
+
+          if [[ "$INPUT_PATH" == *.xcworkspace ]]; then
+            echo "xcode_container=-workspace" >> "$GITHUB_OUTPUT"
+          elif [[ "$INPUT_PATH" == *.xcodeproj ]]; then
+            echo "xcode_container=-project" >> "$GITHUB_OUTPUT"
+          else
+            echo "Could not resolve .xcodeproj/.xcworkspace path (input: $INPUT_PATH)"
+            exit 1
+          fi
+          echo "project_path=$INPUT_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Swift package dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            "${{ steps.project_kind.outputs.xcode_container }}" "${{ steps.project_kind.outputs.project_path }}" \
+            -scheme "${{ github.event.inputs.scheme }}" \
+            -resolvePackageDependencies
+
+      - name: Archive app (code signing disabled)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          xcodebuild \
+            "${{ steps.project_kind.outputs.xcode_container }}" "${{ steps.project_kind.outputs.project_path }}" \
+            -scheme "${{ github.event.inputs.scheme }}" \
+            -configuration "${{ github.event.inputs.configuration }}" \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/NetProof.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean archive
+
+      - name: Create unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find "$PWD/build/NetProof.xcarchive/Products/Applications" -maxdepth 1 -name "*.app" | head -n 1)
+          if [[ -z "$APP_PATH" ]]; then
+            echo "No .app found in archive"
+            exit 1
+          fi
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          /usr/bin/zip -r "$PWD/build/NetProof-unsigned.ipa" Payload
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ipa
+          path: build/NetProof-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: ${{ github.event.inputs.create_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="unsigned-ipa-${GITHUB_RUN_NUMBER}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Unsigned IPA $TAG" --notes "Automated unsigned iOS IPA build."
+          gh release upload "$TAG" "$PWD/build/NetProof-unsigned.ipa" --clobber
