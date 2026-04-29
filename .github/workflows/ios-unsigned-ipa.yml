@@ -1,0 +1,167 @@
+name: iOS Unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      scheme:
+        description: "Xcode scheme to build"
+        required: true
+        default: "NetProof"
+      configuration:
+        description: "Build configuration"
+        required: true
+        default: "Release"
+      project_path:
+        description: "Path to .xcodeproj/.xcworkspace (leave default for auto)"
+        required: true
+        default: "auto"
+      create_release:
+        description: "Create/update GitHub release and upload IPA"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build_unsigned_ipa:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install project generation tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew update
+          brew install xcodegen
+
+      - name: Generate Xcode project from spec (if present)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "project.yml" ]]; then
+            xcodegen generate
+          fi
+          echo "Discovered Xcode containers:"
+          find . -maxdepth 4 \( -name "*.xcodeproj" -o -name "*.xcworkspace" \) -print || true
+
+      - name: Resolve project/workspace path
+        id: project_kind
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_PATH="${{ github.event.inputs.project_path }}"
+          RESOLVED_PATH=""
+
+          if [[ "$INPUT_PATH" != "auto" ]]; then
+            if [[ -d "$INPUT_PATH" ]]; then
+              RESOLVED_PATH="$INPUT_PATH"
+            elif [[ -d "./$INPUT_PATH" ]]; then
+              RESOLVED_PATH="./$INPUT_PATH"
+            else
+              echo "Provided project_path not found: $INPUT_PATH"
+              find . -maxdepth 4 \( -name "*.xcodeproj" -o -name "*.xcworkspace" \) -print || true
+              exit 1
+            fi
+          else
+            if [[ -d "./NetProof.xcworkspace" ]]; then
+              RESOLVED_PATH="./NetProof.xcworkspace"
+            elif [[ -d "./NetProof.xcodeproj" ]]; then
+              RESOLVED_PATH="./NetProof.xcodeproj"
+            else
+              RESOLVED_PATH=$(find . -maxdepth 4 -name "*.xcworkspace" | head -n1 || true)
+              if [[ -z "$RESOLVED_PATH" ]]; then
+                RESOLVED_PATH=$(find . -maxdepth 4 -name "*.xcodeproj" | head -n1 || true)
+              fi
+            fi
+          fi
+
+          if [[ -z "$RESOLVED_PATH" ]]; then
+            echo "No .xcodeproj/.xcworkspace found after generation."
+            exit 1
+          fi
+
+          if [[ "$RESOLVED_PATH" == *.xcworkspace ]]; then
+            XCODE_CONTAINER="-workspace"
+          elif [[ "$RESOLVED_PATH" == *.xcodeproj ]]; then
+            XCODE_CONTAINER="-project"
+          else
+            echo "Invalid resolved path: $RESOLVED_PATH"
+            exit 1
+          fi
+
+          REL_PATH=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.abspath(sys.argv[1]), os.getcwd()))' "$RESOLVED_PATH")
+          echo "Resolved build container: $XCODE_CONTAINER $REL_PATH"
+          echo "xcode_container=$XCODE_CONTAINER" >> "$GITHUB_OUTPUT"
+          echo "project_path=$REL_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Swift package dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            "${{ steps.project_kind.outputs.xcode_container }}" "${{ steps.project_kind.outputs.project_path }}" \
+            -scheme "${{ github.event.inputs.scheme }}" \
+            -resolvePackageDependencies
+
+      - name: Archive app (code signing disabled)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          xcodebuild \
+            "${{ steps.project_kind.outputs.xcode_container }}" "${{ steps.project_kind.outputs.project_path }}" \
+            -scheme "${{ github.event.inputs.scheme }}" \
+            -configuration "${{ github.event.inputs.configuration }}" \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/NetProof.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean archive
+
+      - name: Create unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find "$PWD/build/NetProof.xcarchive/Products/Applications" -maxdepth 1 -name "*.app" | head -n 1)
+          if [[ -z "$APP_PATH" ]]; then
+            echo "No .app found in archive"
+            exit 1
+          fi
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          /usr/bin/zip -r "$PWD/build/NetProof-unsigned.ipa" Payload
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ipa
+          path: build/NetProof-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: ${{ github.event.inputs.create_release == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="unsigned-ipa-${GITHUB_RUN_NUMBER}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Unsigned IPA $TAG" --notes "Automated unsigned iOS IPA build."
+          gh release upload "$TAG" "$PWD/build/NetProof-unsigned.ipa" --clobber
