@@ -1,0 +1,21 @@
+# Xcode
+DerivedData/
+.build/
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Exported artifacts
+*.ipa
+*.xcarchive
+ExportOptions.plist
+
+# Ruby/Fastlane
+.bundle/
+vendor/bundle/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output/
