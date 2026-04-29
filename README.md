@@ -62,3 +62,22 @@ Default URL: `http://localhost:8080`
 - Replace mock network service with `HTTPNetworkTestService` for device runs.
 - Confirm PDF export/paywall behavior.
 
+
+## Unsigned iOS IPA release workflow
+
+This repository includes `.github/workflows/ios-unsigned-ipa.yml` for automated unsigned Release IPA builds in GitHub Actions.
+
+### Run it
+
+1. Open **Actions** → **iOS Unsigned IPA** → **Run workflow**.
+2. Provide:
+   - `scheme` (default `NetProof`)
+   - `configuration` (default `Release`)
+   - `project_path` (default `NetProof.xcodeproj`, can be `.xcworkspace`)
+3. Download the `unsigned-ipa` artifact from the workflow run.
+
+### Notes
+
+- Build is intentionally unsigned (`CODE_SIGNING_ALLOWED=NO`).
+- This is useful for CI validation, external signing pipelines, or re-signing later.
+- No Apple signing certificates or API keys are stored in this repository.
