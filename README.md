@@ -70,3 +70,13 @@ Use `IPA_VALIDATION.md` for a full checklist and verification commands.
 
 Key point: Apple iOS SDKs/frameworks (UIKit/SwiftUI/Foundation/etc.) are **not embedded** in IPA; iOS provides them at runtime.
 Only your app binary, resources, and any required third-party embedded frameworks ship in the IPA.
+
+## Real test logic (device)
+
+NetProof now supports real HTTP-based throughput tests via `HTTPNetworkTestService` using your backend endpoints (`/download`, `/upload`, `/health`).
+Set `AppConfig.useRealHTTPTests = true` and point `backendBaseURL` at a reachable host from iPhone.
+
+### About Speedtest.net / Fast.com APIs
+
+For MVP, this repo uses your own backend test endpoints. Third-party speed APIs may require licensing or have restrictive terms.
+Use officially documented APIs and terms before integrating any external provider.
