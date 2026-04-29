@@ -1,0 +1,5 @@
+.DS_Store
+build/
+DerivedData/
+node_modules/
+.env
