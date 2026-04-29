@@ -22,3 +22,11 @@ test('POST /upload', async () => {
   assert.equal(res.statusCode, 200);
   assert.ok(res.json().receivedBytes > 0);
 });
+
+test('download disabled in upload-only mode', async () => {
+  process.env.UPLOAD_ONLY = 'true';
+  const app = buildServer();
+  const res = await app.inject({ method: 'GET', url: '/download?sizeMB=1' });
+  assert.equal(res.statusCode, 403);
+  process.env.UPLOAD_ONLY = '';
+});

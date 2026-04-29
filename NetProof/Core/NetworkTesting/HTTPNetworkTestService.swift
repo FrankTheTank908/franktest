@@ -9,8 +9,14 @@ struct HTTPNetworkTestService: NetworkTestService {
         let idleSamples = try await latencySamples(count: 8)
         let idle = idleSamples.reduce(0,+)/Double(idleSamples.count)
 
-        progress(.init(phase: "Testing download throughput", metrics: .mock))
-        let download = try await measureDownloadMbps(sizeMB: 12)
+        let remoteConfig = try? await fetchConfig()
+        let download: Double
+        if remoteConfig?.uploadOnly == true || type == .uploadDoctor {
+            download = 0
+        } else {
+            progress(.init(phase: "Testing download throughput", metrics: .mock))
+            download = try await measureDownloadMbps(sizeMB: 12)
+        }
 
         progress(.init(phase: "Testing upload throughput", metrics: .mock))
         let uploadSamples = try await uploadSamplesMbps(iterations: type == .quick ? 4 : 8, payloadMB: 4)
@@ -95,5 +101,14 @@ struct HTTPNetworkTestService: NetworkTestService {
         let mean = values.reduce(0,+)/Double(values.count)
         let variance = values.map { pow($0 - mean, 2) }.reduce(0,+) / Double(values.count)
         return sqrt(variance)
+    }
+}
+
+
+private struct RemoteConfig: Decodable { let uploadOnly: Bool? }
+extension HTTPNetworkTestService {
+    fileprivate func fetchConfig() async throws -> RemoteConfig {
+        let (data, _) = try await session.data(from: baseURL.appending(path: "/config"))
+        return try JSONDecoder().decode(RemoteConfig.self, from: data)
     }
 }

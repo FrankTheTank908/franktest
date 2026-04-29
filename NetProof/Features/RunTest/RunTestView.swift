@@ -14,9 +14,12 @@ final class RunTestViewModel: ObservableObject {
 
     init(diagnosisEngine: DiagnosisEngine = RuleBasedDiagnosisEngine()) {
         self.diagnosisEngine = diagnosisEngine
-        if AppConfig.useRealHTTPTests {
+        switch AppConfig.provider {
+        case .netProofBackend:
             self.networkService = HTTPNetworkTestService(baseURL: AppConfig.backendBaseURL)
-        } else {
+        case .publicFallback:
+            self.networkService = PublicEndpointSpeedTestService(downloadURL: AppConfig.publicDownloadURL, uploadURL: AppConfig.publicUploadURL)
+        case .mock:
             self.networkService = MockNetworkTestService()
         }
     }
