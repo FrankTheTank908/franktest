@@ -7,8 +7,25 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install pi-gen build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            quilt \
+            qemu-user-static \
+            qemu-user-binfmt \
+            binfmt-support \
+            debootstrap \
+            libarchive-tools \
+            arch-test \
+            git \
+            coreutils \
+            quilt
+
       - name: Clone pi-gen
         run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen.git
+
       - name: Add NetProof stage
         run: |
           mkdir -p pi-gen/stage2/04-netproof/files
@@ -32,10 +49,12 @@ jobs:
           EOFCHROOT
           SH
           chmod +x pi-gen/stage2/04-netproof/00-run.sh
+
       - name: Build image
         run: |
           cd pi-gen
           sudo ./build.sh
+
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
         with:
