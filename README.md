@@ -1,33 +1,25 @@
 # Frank the Tank iOS test app
 
-This repo is configured to auto-generate project config, build a signed IPA in GitHub Actions, and attach it to workflow artifacts + a GitHub Release.
+This repo builds an **unsigned IPA** in GitHub Actions (no certificate/profile required in CI).
 
 ## App behavior
 - Full-screen "Frank the Tank" themed background.
 - A **Push me** button.
-- Tapping button shows popup: **Yay!**
+- Tapping the button shows popup: **Yay!**
 
-## What is auto-generated
-- Random bundle id by default during CI build (`com.autogen.<random>`).
-- `Config/Generated.xcconfig` via `scripts/generate-config.sh`.
-- Xcode project from `project.yml` using XcodeGen.
+## Unsigned IPA output
+The workflow compiles with code signing disabled, then packages the built `.app` into:
+- Artifact: `MyFirstiOSApp-unsigned-ipa`
+- File: `MyFirstiOSApp-unsigned.ipa`
+- Release tag on `main`: `unsigned-build-<run_number>`
 
-## Required secrets (for signed IPA)
-- `APPLE_TEAM_ID`
-- `BUILD_CERTIFICATE_BASE64`
-- `P12_PASSWORD`
-- `BUILD_PROVISION_PROFILE_BASE64`
-- `KEYCHAIN_PASSWORD`
-
-## Optional repository variable
-- `APP_BUNDLE_ID` (set this if your provisioning profile expects a fixed bundle id)
-
-> Important: If you use random bundle IDs, your provisioning profile must support that identifier. Most development profiles require a matching, explicit bundle id.
+## Inputs
+- Optional repository variable: `APP_BUNDLE_ID`
+  - If not set, `scripts/generate-config.sh` creates a random one like `com.autogen.<random>`.
 
 ## Triggering builds
-- Manual: Actions → **Build iOS IPA** → Run workflow.
+- Manual: Actions → **Build Unsigned iOS IPA** → Run workflow.
 - Automatic: push to `main`.
 
-## Output
-- Artifact: `MyFirstiOSApp-ipa`
-- Release tag: `build-<run_number>` with attached `.ipa`
+## Important
+This IPA is unsigned by design. Install will require you to sign it yourself using your own certificate/provisioning flow.

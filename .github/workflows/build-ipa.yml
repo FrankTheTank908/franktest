@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build Unsigned iOS IPA
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build-unsigned-ipa:
     runs-on: macos-latest
 
     steps:
@@ -19,85 +19,53 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate app config (team + bundle id)
+      - name: Generate app config (bundle id)
         env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_BUNDLE_ID: ${{ vars.APP_BUNDLE_ID }}
         run: ./scripts/generate-config.sh
 
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Import signing certificate and profile
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      - name: Build app (unsigned)
         run: |
           set -euo pipefail
-          CERT_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_profile.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles
-
-      - name: Build archive
-        run: |
           xcodebuild \
             -project MyFirstiOSApp.xcodeproj \
             -scheme MyFirstiOSApp \
             -configuration Release \
-            -archivePath $RUNNER_TEMP/MyFirstiOSApp.xcarchive \
-            -destination 'generic/platform=iOS' \
-            clean archive
+            -sdk iphoneos \
+            -derivedDataPath $RUNNER_TEMP/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
 
-      - name: Export IPA
+      - name: Package unsigned IPA
         run: |
-          cat > ExportOptions.plist <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>stripSwiftSymbols</key>
-            <true/>
-            <key>compileBitcode</key>
-            <false/>
-            <key>destination</key>
-            <string>export</string>
-          </dict>
-          </plist>
-          PLIST
+          set -euo pipefail
+          APP_PATH=$(find "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos" -maxdepth 1 -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Could not find built .app bundle"
+            exit 1
+          fi
 
-          xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/MyFirstiOSApp.xcarchive \
-            -exportPath $RUNNER_TEMP/export \
-            -exportOptionsPlist ExportOptions.plist
+          mkdir -p $RUNNER_TEMP/Payload
+          cp -R "$APP_PATH" $RUNNER_TEMP/Payload/
 
-      - name: Upload IPA artifact
+          mkdir -p $RUNNER_TEMP/export
+          (cd $RUNNER_TEMP && /usr/bin/zip -qry export/MyFirstiOSApp-unsigned.ipa Payload)
+
+      - name: Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MyFirstiOSApp-ipa
-          path: ${{ runner.temp }}/export/*.ipa
+          name: MyFirstiOSApp-unsigned-ipa
+          path: ${{ runner.temp }}/export/MyFirstiOSApp-unsigned.ipa
 
-      - name: Create GitHub release with IPA
+      - name: Create GitHub release with unsigned IPA
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: Build ${{ github.run_number }}
-          files: ${{ runner.temp }}/export/*.ipa
+          tag_name: unsigned-build-${{ github.run_number }}
+          name: Unsigned Build ${{ github.run_number }}
+          files: ${{ runner.temp }}/export/MyFirstiOSApp-unsigned.ipa
