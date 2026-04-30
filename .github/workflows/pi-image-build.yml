@@ -8,19 +8,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pi-gen dependencies (conflict-safe)
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y quilt debootstrap libarchive-tools arch-test binfmt-support git coreutils
-          if apt-cache show qemu-user-binfmt >/dev/null 2>&1; then
-            sudo apt-get install -y qemu-user-binfmt || true
-          fi
-          if ! dpkg -s qemu-user-binfmt >/dev/null 2>&1; then
-            sudo apt-get install -y qemu-user-static
-          fi
+          sudo apt-get install -y quilt qemu-user-static debootstrap libarchive-tools arch-test binfmt-support git coreutils docker.io
+
+      - name: Register qemu binfmt
+        run: |
+          sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 
       - name: Clone pi-gen
         run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen.git
+
+      - name: Configure pi-gen for Pi 5 (arm64 bookworm)
+        run: |
+          cat > pi-gen/config <<'CFG'
+          IMG_NAME='netproof-pi5'
+          RELEASE='bookworm'
+          TARGET_ARCH='arm64'
+          FIRST_USER_NAME='netproof'
+          FIRST_USER_PASS='netproof123'
+          ENABLE_SSH=1
+          STAGE_LIST='stage0 stage1 stage2'
+          CFG
 
       - name: Add NetProof stage
         run: |
@@ -41,15 +51,14 @@ jobs:
           npm install --omit=dev
           chown -R netproof:netproof /opt/netproof
           systemctl enable netproof-upload
-          echo 'netproof:netproof123' | chpasswd
           EOFCHROOT
           SH
           chmod +x pi-gen/stage2/04-netproof/00-run.sh
 
-      - name: Build image
+      - name: Build image in docker mode
         run: |
           cd pi-gen
-          sudo ./build.sh
+          sudo ./build-docker.sh
 
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
