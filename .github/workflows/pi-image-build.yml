@@ -5,22 +5,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      ARCH: arm64
+      RELEASE: bookworm
     steps:
       - uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y quilt qemu-user-static debootstrap libarchive-tools arch-test binfmt-support git coreutils
+          sudo apt-get install -y quilt qemu-user-binfmt debootstrap libarchive-tools arch-test binfmt-support git coreutils
 
-      - name: Register qemu binfmt
+      - name: Verify qemu-arm available
         run: |
-          sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          command -v qemu-arm
+          qemu-arm --version
 
       - name: Clone pi-gen
         run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen.git
 
-      - name: Configure pi-gen for Pi 5 (arm64 bookworm)
+      - name: Configure pi-gen for Pi 5
         run: |
           cat > pi-gen/config <<'CFG'
           IMG_NAME='netproof-pi5'
@@ -58,7 +62,7 @@ jobs:
       - name: Build image in docker mode
         run: |
           cd pi-gen
-          sudo ./build-docker.sh
+          sudo -E ./build-docker.sh
 
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
