@@ -19,10 +19,8 @@ jobs:
       - name: Install pi-gen dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y quilt qemu-user-static debootstrap libarchive-tools arch-test binfmt-support git coreutils
-          sudo update-binfmts --enable qemu-arm || true
-          sudo update-binfmts --enable qemu-aarch64 || true
-
+          sudo apt-get install -y quilt qemu-user-binfmt debootstrap libarchive-tools arch-test binfmt-support git coreutils
+          
       - name: Verify qemu registration
         run: |
           update-binfmts --display qemu-arm | head -n 20 || true
