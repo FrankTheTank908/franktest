@@ -8,19 +8,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pi-gen build dependencies
+      - name: Install pi-gen dependencies (conflict-safe)
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            quilt \
-            qemu-user-static \
-            binfmt-support \
-            debootstrap \
-            libarchive-tools \
-            arch-test \
-            git \
-            coreutils \
-            quilt
+          sudo apt-get install -y quilt debootstrap libarchive-tools arch-test binfmt-support git coreutils
+          if apt-cache show qemu-user-binfmt >/dev/null 2>&1; then
+            sudo apt-get install -y qemu-user-binfmt || true
+          fi
+          if ! dpkg -s qemu-user-binfmt >/dev/null 2>&1; then
+            sudo apt-get install -y qemu-user-static
+          fi
 
       - name: Clone pi-gen
         run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen.git
