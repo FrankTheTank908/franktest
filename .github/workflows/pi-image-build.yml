@@ -29,6 +29,12 @@ jobs:
       - name: Clone pi-gen
         run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen.git
 
+
+      - name: Patch pi-gen package list for current repos
+        run: |
+          sed -i '/^rpi-swap$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
+          sed -i '/^rpi-loop-utils$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
+          sed -i '/^rpi-usb-gadget$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
       - name: Configure pi-gen for Pi 5
         run: |
           cat > pi-gen/config <<'CFG'

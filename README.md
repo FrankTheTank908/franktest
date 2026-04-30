@@ -124,3 +124,96 @@ For your setup (`http://franksplex.com`, no TLS yet):
 - point app `AppConfig.provider = .netProofBackend` and `backendBaseURL` to your Pi endpoint
 
 See `pi-image/README.md` for image build + flashing steps.
+
+## Raspberry Pi 5 deployment + app connection (franksplex.com:3421)
+
+Use this section to get NetProof app and your Pi upload server connected end-to-end.
+
+### 1) Flash and boot Pi image
+
+1. Run workflow **Build Pi5 Image** and download artifact `netproof-pi5-image`.
+2. Flash image to SD card (Raspberry Pi Imager / Balena Etcher).
+3. Boot Pi and SSH in:
+   - host: your Pi IP
+   - user: `netproof`
+   - password: `netproof123` (change immediately)
+
+### 2) Configure server for your domain/port
+
+On Pi, edit `/etc/default/netproof-upload`:
+
+```bash
+sudo nano /etc/default/netproof-upload
+```
+
+Set:
+
+```env
+ALLOWED_ORIGIN=http://franksplex.com:3421
+UPLOAD_ONLY=true
+PORT=8080
+```
+
+Restart server:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart netproof-upload
+sudo systemctl status netproof-upload
+```
+
+### 3) Router/NAT port forward
+
+You said public URL is `http://franksplex.com:3421`.
+Configure router to forward:
+
+- WAN TCP `3421` -> PI_LAN_IP TCP `8080`
+
+Then verify externally:
+
+```bash
+curl http://franksplex.com:3421/health
+curl http://franksplex.com:3421/config
+```
+
+Expected `/health` should return `status: ok`.
+
+### 4) Point iOS app to your Pi server
+
+Edit `NetProof/Core/Utilities/AppConfig.swift`:
+
+- set provider to backend mode
+- set backend base URL to your domain+port
+
+```swift
+static let provider: TestProvider = .netProofBackend
+static let backendBaseURL = URL(string: "http://franksplex.com:3421")!
+```
+
+Rebuild app in Xcode and run on device.
+
+### 5) iOS App Transport Security (HTTP)
+
+Because you are using `http://` (not HTTPS), add ATS exception in the app's `Info.plist` for `franksplex.com` during MVP testing, otherwise iOS may block requests.
+
+### 6) Validate full test path
+
+1. Open NetProof on iPhone.
+2. Run **Upload Doctor** (best for your 40 Mbps upload line).
+3. Confirm server receives upload requests.
+4. Generate report.
+
+Pi logs:
+
+```bash
+journalctl -u netproof-upload -f
+```
+
+### 7) Recommended for public launch
+
+Before wide release/TestFlight/App Store public usage:
+
+- Add HTTPS (Caddy/Nginx + Let's Encrypt)
+- Add rate limiting and request size limits
+- Change default Pi credentials
+- Add uptime monitor for `/health`
