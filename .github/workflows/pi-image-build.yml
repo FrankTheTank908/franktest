@@ -11,7 +11,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y quilt qemu-user-static debootstrap libarchive-tools arch-test binfmt-support git coreutils docker.io
+          sudo apt-get install -y quilt qemu-user-static debootstrap libarchive-tools arch-test binfmt-support git coreutils
 
       - name: Register qemu binfmt
         run: |
