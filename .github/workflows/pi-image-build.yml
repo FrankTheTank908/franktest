@@ -32,9 +32,16 @@ jobs:
 
       - name: Patch pi-gen package list for current repos
         run: |
-          sed -i '/^rpi-swap$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
-          sed -i '/^rpi-loop-utils$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
-          sed -i '/^rpi-usb-gadget$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
+          for f in pi-gen/stage2/01-sys-tweaks/00-packages pi-gen/stage2/01-sys-tweaks/00-packages-nr; do
+            [ -f "$f" ] || continue
+            sed -i '/rpi-swap/d' "$f"
+            sed -i '/rpi-loop-utils/d' "$f"
+            sed -i '/rpi-usb-gadget/d' "$f"
+          done
+
+      - name: Verify package patch applied
+        run: |
+          grep -nE 'rpi-swap|rpi-loop-utils|rpi-usb-gadget' pi-gen/stage2/01-sys-tweaks/00-packages pi-gen/stage2/01-sys-tweaks/00-packages-nr && exit 1 || true
       - name: Configure pi-gen for Pi 5
         run: |
           cat > pi-gen/config <<'CFG'
