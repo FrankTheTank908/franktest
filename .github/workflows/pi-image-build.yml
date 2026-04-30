@@ -11,15 +11,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Setup QEMU emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,arm
+
+      - name: Install pi-gen dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y quilt qemu-user-binfmt debootstrap libarchive-tools arch-test binfmt-support git coreutils
+          sudo apt-get install -y quilt qemu-user-static debootstrap libarchive-tools arch-test binfmt-support git coreutils
+          sudo update-binfmts --enable qemu-arm || true
+          sudo update-binfmts --enable qemu-aarch64 || true
 
-      - name: Verify qemu-arm available
+      - name: Verify qemu registration
         run: |
-          command -v qemu-arm
-          qemu-arm --version
+          update-binfmts --display qemu-arm | head -n 20 || true
+          update-binfmts --display qemu-aarch64 | head -n 20 || true
 
       - name: Clone pi-gen
         run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen.git
@@ -59,10 +66,10 @@ jobs:
           SH
           chmod +x pi-gen/stage2/04-netproof/00-run.sh
 
-      - name: Build image in docker mode
+      - name: Build image
         run: |
           cd pi-gen
-          sudo -E ./build-docker.sh
+          sudo -E ./build.sh
 
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
