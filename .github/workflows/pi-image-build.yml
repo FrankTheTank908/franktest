@@ -42,6 +42,10 @@ jobs:
       - name: Verify package patch applied
         run: |
           grep -nE 'rpi-swap|rpi-loop-utils|rpi-usb-gadget' pi-gen/stage2/01-sys-tweaks/00-packages pi-gen/stage2/01-sys-tweaks/00-packages-nr && exit 1 || true
+
+      - name: Patch sys-tweaks script for missing rpi-resize.service
+        run: |
+          sed -i '/rpi-resize.service/d' pi-gen/stage2/01-sys-tweaks/01-run.sh || true
       - name: Configure pi-gen for Pi 5
         run: |
           cat > pi-gen/config <<'CFG'
