@@ -1,0 +1,82 @@
+name: Build Pi5 Image
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    env:
+      ARCH: arm64
+      RELEASE: bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup QEMU emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64,arm
+
+      - name: Install pi-gen dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y quilt qemu-user-binfmt debootstrap libarchive-tools arch-test binfmt-support git coreutils
+          
+      - name: Verify qemu registration
+        run: |
+          update-binfmts --display qemu-arm | head -n 20 || true
+          update-binfmts --display qemu-aarch64 | head -n 20 || true
+
+      - name: Clone pi-gen
+        run: git clone --depth=1 https://github.com/RPi-Distro/pi-gen.git
+
+
+      - name: Patch pi-gen package list for current repos
+        run: |
+          sed -i '/^rpi-swap$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
+          sed -i '/^rpi-loop-utils$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
+          sed -i '/^rpi-usb-gadget$/d' pi-gen/stage2/01-sys-tweaks/00-packages || true
+      - name: Configure pi-gen for Pi 5
+        run: |
+          cat > pi-gen/config <<'CFG'
+          IMG_NAME='netproof-pi5'
+          RELEASE='bookworm'
+          TARGET_ARCH='arm64'
+          FIRST_USER_NAME='netproof'
+          FIRST_USER_PASS='netproof123'
+          ENABLE_SSH=1
+          STAGE_LIST='stage0 stage1 stage2'
+          CFG
+
+      - name: Add NetProof stage
+        run: |
+          mkdir -p pi-gen/stage2/04-netproof/files
+          cp -r server pi-gen/stage2/04-netproof/files/server
+          cp -r pi-image/overlay/etc pi-gen/stage2/04-netproof/files/etc
+          cat > pi-gen/stage2/04-netproof/00-run.sh <<'SH'
+          #!/bin/bash -e
+          on_chroot <<'EOFCHROOT'
+          apt-get update
+          apt-get install -y nodejs npm
+          id -u netproof >/dev/null 2>&1 || useradd -m -s /bin/bash netproof
+          mkdir -p /opt/netproof
+          cp -r /stage2/files/server /opt/netproof/server
+          cp /stage2/files/etc/default/netproof-upload /etc/default/netproof-upload
+          cp /stage2/files/etc/systemd/system/netproof-upload.service /etc/systemd/system/netproof-upload.service
+          cd /opt/netproof/server
+          npm install --omit=dev
+          chown -R netproof:netproof /opt/netproof
+          systemctl enable netproof-upload
+          EOFCHROOT
+          SH
+          chmod +x pi-gen/stage2/04-netproof/00-run.sh
+
+      - name: Build image
+        run: |
+          cd pi-gen
+          sudo -E ./build.sh
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netproof-pi5-image
+          path: pi-gen/deploy/*.img*
