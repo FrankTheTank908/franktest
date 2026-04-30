@@ -1,0 +1,12 @@
+{
+  "name": "netproof-server",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0"
+  }
+}

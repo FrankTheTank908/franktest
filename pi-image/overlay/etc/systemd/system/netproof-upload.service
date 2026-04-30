@@ -1,0 +1,17 @@
+[Unit]
+Description=NetProof Upload Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/default/netproof-upload
+WorkingDirectory=/opt/netproof/server
+ExecStart=/usr/bin/node /opt/netproof/server/src/index.js
+Restart=always
+RestartSec=2
+User=netproof
+Group=netproof
+
+[Install]
+WantedBy=multi-user.target
